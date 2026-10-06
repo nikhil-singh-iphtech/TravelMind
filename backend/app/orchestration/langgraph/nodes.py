@@ -66,11 +66,14 @@ def _hotel_input(state: GraphState) -> HotelAgentInput:
     return HotelAgentInput(
         city=req.destination, check_in=req.start_date.isoformat(), check_out=check_out.isoformat(),
         guests=req.travellers, max_price_per_night=float(hotel_cap(req)), currency=req.currency,
+        preferences=state.preferences,
     )
 
 
 def _activity_input(state: GraphState) -> ActivityAgentInput:
-    return ActivityAgentInput(city=state.request.destination, interests=state.request.interests)
+    return ActivityAgentInput(
+        city=state.request.destination, interests=state.request.interests, preferences=state.preferences,
+    )
 
 
 def _weather_input(state: GraphState) -> WeatherAgentInput:

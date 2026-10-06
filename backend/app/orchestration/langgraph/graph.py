@@ -1,5 +1,7 @@
 from langgraph.graph import END, START, StateGraph
 
+from app.services.memory_service import MemoryService
+
 from app.agents import ActivityAgent, BudgetAgent, ConstraintAgent, FlightAgent, HotelAgent, WeatherAgent
 from app.llm.base import LLMProvider
 from app.orchestration.langgraph.nodes import (
@@ -62,14 +64,20 @@ def build_graph_from_llm(llm: LLMProvider):
     )
 
 
-async def run_workflow(graph, request: TravelRequest) -> TravelState:
-    """
-    Boundary conversion, same pattern you've used everywhere since
-    Phase 4: validate on the way in, validate on the way out.
-    graph.ainvoke() does NOT return a GraphState instance — even with
-    a Pydantic schema, it returns a plain dict-like object — so we
-    validate it back into a real TravelState here.
-    """
-    initial = GraphState(request=request)
+async def run_workflow(
+    graph, request: TravelRequest, user_id: int | None = None, memory_service: MemoryService | None = None,
+) -> TravelState:
+    preferences_text = None
+    if memory_service and user_id:
+        prefs = await memory_service.get_preferences(user_id)
+        if prefs:
+            preferences_text = "; ".join(f"{p.key}: {p.value}" for p in prefs)
+
+    initial = GraphState(request=request, preferences=preferences_text)
     result = await graph.ainvoke(initial)
-    return TravelState.model_validate(dict(result))
+    state = TravelState.model_validate(dict(result))
+
+    if state.status == "completed" and memory_service and user_id:
+        await memory_service.save_trip(user_id, state)
+
+    return state

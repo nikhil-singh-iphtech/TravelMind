@@ -1,0 +1,5 @@
+Kyoto moves at a slower pace than Tokyo, and its appeal is almost entirely cultural and outdoor at once. Fushimi Inari's thousands of vermillion torii gates wind up a forested hillside — arriving before 8am avoids most of the crowds. Arashiyama's bamboo grove is a short walk from a quiet riverside path, good for an unhurried morning away from the city center.
+
+The Philosopher's Path follows a canal lined with cherry trees between Ginkaku-ji and Nanzen-ji, both worth visiting for their gardens rather than the temples themselves. Higashiyama's preserved streets, especially around Kiyomizu-dera, are best walked in early morning or early evening to avoid the densest tour groups.
+
+Kyoto's food culture leans toward kaiseki and small, specialized restaurants rather than large markets, though Nishiki Market remains a good stop for regional snacks and tea. Unlike Tokyo, much of central Kyoto is walkable or a short bike ride, with buses filling in longer distances less convenient by rail.
