@@ -73,8 +73,11 @@ class TravelOrchestrator:
     # The workflow
     # ------------------------------------------------------------------
 
-    async def run(self, request: TravelRequest, user_id: int | None = None) -> TravelState:
+    async def run(
+        self, request: TravelRequest, user_id: int | None = None, event_sink=None,
+    ) -> TravelState:
         state = TravelState(request=request)
+        self._event_sink = event_sink
         self._emit(state, "planning_started", f"Planning trip to {request.destination}")
 
         preferences_text = await self._load_preferences(user_id)
@@ -238,5 +241,8 @@ class TravelOrchestrator:
         return state
 
     def _emit(self, state: TravelState, event_type: str, message: str) -> None:
-        state.events.append(WorkflowEvent(run_id=state.run_id, event_type=event_type, message=message))
+        event = WorkflowEvent(run_id=state.run_id, event_type=event_type, message=message)
+        state.events.append(event)
         logger.info("run=%s event=%s %s", state.run_id, event_type, message)
+        if getattr(self, "_event_sink", None):
+            self._event_sink(event)
