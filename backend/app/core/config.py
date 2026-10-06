@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     )
     embedding_model: str = "all-MiniLM-L6-v2"
 
+    use_real_weather: bool = False
+
 
 # Created once, imported everywhere else that needs settings.
 settings = Settings()

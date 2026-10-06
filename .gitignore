@@ -112,3 +112,6 @@ results/
 # =========================
 # Do NOT ignore migrations/
 # Alembic migration files should normally be committed.
+
+node_modules/
+package-lock.json
