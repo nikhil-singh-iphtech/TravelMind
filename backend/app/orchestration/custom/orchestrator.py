@@ -1,7 +1,6 @@
 import asyncio
 import logging
 from datetime import timedelta
-from decimal import Decimal
 from typing import Any
 
 from app.agents import (
@@ -12,23 +11,23 @@ from app.agents import (
     HotelAgent, HotelAgentInput,
     WeatherAgent, WeatherAgentInput,
 )
-from app.agents.base import AgentResult
 from app.llm.base import LLMProvider
+from app.orchestration.agent_retry import run_agent_with_retry
+from app.orchestration.custom.replanner import Replanner
+from app.orchestration.rules import FOOD_PER_PERSON_PER_DAY, TRANSPORT_PER_PERSON_PER_DAY, hotel_cap
 from app.schemas import Itinerary
 from app.schemas.state import TravelRequest, TravelState, WorkflowEvent
-from app.orchestration.custom.replanner import Replanner
-from app.orchestration.agent_retry import run_agent_with_retry
-from app.orchestration.rules import FOOD_PER_PERSON_PER_DAY, TRANSPORT_PER_PERSON_PER_DAY, hotel_cap
+from app.services.memory_service import MemoryService
 
 logger = logging.getLogger(__name__)
-
-
 
 
 class TravelOrchestrator:
     """
     Drives one planning run: state -> parallel research -> select ->
-    budget -> constraints -> completed / failed.
+    budget -> constraints -> completed / failed, with replanning on
+    constraint failure, and optional memory (preferences read in
+    before planning, completed trips saved out after).
     """
 
     def __init__(
@@ -41,6 +40,7 @@ class TravelOrchestrator:
         budget_agent: BudgetAgent,
         constraint_agent: ConstraintAgent,
         replanner: Replanner | None = None,
+        memory_service: MemoryService | None = None,
         retry_delay: float = 1.0,
     ):
         self.flight_agent = flight_agent
@@ -50,10 +50,13 @@ class TravelOrchestrator:
         self.budget_agent = budget_agent
         self.constraint_agent = constraint_agent
         self.replanner = replanner or Replanner()
+        self.memory_service = memory_service
         self.retry_delay = retry_delay
 
     @classmethod
-    def from_llm(cls, llm: LLMProvider, retry_delay: float = 1.0) -> "TravelOrchestrator":
+    def from_llm(
+        cls, llm: LLMProvider, retry_delay: float = 1.0, memory_service: MemoryService | None = None,
+    ) -> "TravelOrchestrator":
         return cls(
             flight_agent=FlightAgent(llm),
             hotel_agent=HotelAgent(llm),
@@ -62,73 +65,82 @@ class TravelOrchestrator:
             budget_agent=BudgetAgent(llm),
             constraint_agent=ConstraintAgent(llm),
             replanner=Replanner(),
+            memory_service=memory_service,
             retry_delay=retry_delay,
         )
+
     # ------------------------------------------------------------------
     # The workflow
     # ------------------------------------------------------------------
 
-    async def run(self, request: TravelRequest) -> TravelState:
+    async def run(self, request: TravelRequest, user_id: int | None = None) -> TravelState:
         state = TravelState(request=request)
         self._emit(state, "planning_started", f"Planning trip to {request.destination}")
 
+        preferences_text = await self._load_preferences(user_id)
+
         while True:
-            await self._run_research(state)
+            await self._run_research(state, preferences_text)
 
             if not state.flights or not state.hotels:
-                return self._fail(state, "Cannot build a plan without flights and hotels")
+                state = self._fail(state, "Cannot build a plan without flights and hotels")
+                break
 
             self._select(state)
             await self._check_budget(state)
             await self._check_constraints(state)
 
             if state.constraint_result.passed:
-                return self._complete(state)
+                state = self._complete(state)
+                break
 
             if not self.replanner.should_replan(state):
-                return self._fail(state, f"Constraints failed after {state.iteration} replan(s)")
+                state = self._fail(state, f"Constraints failed after {state.iteration} replan(s)")
+                break
 
             self.replanner.replan(state)
-            # Loop back to _run_research with the updated strategy/cap.
+            # loop back to research with the updated strategy/cap
+
+        if state.status == "completed" and self.memory_service and user_id:
+            await self.memory_service.save_trip(user_id, state)
+
+        return state
 
     # ------------------------------------------------------------------
     # Steps
     # ------------------------------------------------------------------
 
-    async def _run_research(self, state: TravelState) -> None:
+    async def _load_preferences(self, user_id: int | None) -> str | None:
+        if not self.memory_service or not user_id:
+            return None
+        prefs = await self.memory_service.get_preferences(user_id)
+        if not prefs:
+            return None
+        return "; ".join(f"{p.key}: {p.value}" for p in prefs)
+
+    async def _run_research(self, state: TravelState, preferences_text: str | None) -> None:
         req = state.request
         check_in = req.start_date
         check_out = req.start_date + timedelta(days=req.duration_days)
 
-        # gather starts all four coroutines together and waits for all of them.
-        # _run_agent never raises, so one failing agent cannot cancel the others.
         flight, hotel, activity, weather = await asyncio.gather(
             self._run_agent(state, "flight", self.flight_agent, FlightAgentInput(
-                origin=req.origin,
-                destination=req.destination,
-                departure_date=check_in.isoformat(),
-                travellers=req.travellers,
-                currency=req.currency,
+                origin=req.origin, destination=req.destination,
+                departure_date=check_in.isoformat(), travellers=req.travellers, currency=req.currency,
             )),
             self._run_agent(state, "hotel", self.hotel_agent, HotelAgentInput(
-                city=req.destination,
-                check_in=check_in.isoformat(),
-                check_out=check_out.isoformat(),
-                guests=req.travellers,
-                max_price_per_night=float(self._hotel_cap(req)),
-                currency=req.currency,
+                city=req.destination, check_in=check_in.isoformat(), check_out=check_out.isoformat(),
+                guests=req.travellers, max_price_per_night=float(hotel_cap(req)), currency=req.currency,
+                preferences=preferences_text,
             )),
             self._run_agent(state, "activity", self.activity_agent, ActivityAgentInput(
-                city=req.destination,
-                interests=req.interests,
+                city=req.destination, interests=req.interests, preferences=preferences_text,
             )),
             self._run_agent(state, "weather", self.weather_agent, WeatherAgentInput(
-                city=req.destination,
-                target_date=check_in.isoformat(),
+                city=req.destination, target_date=check_in.isoformat(),
             )),
         )
 
-        # Write results into the state only after every agent has finished.
         if flight:
             state.flights = flight.data.flights
         if hotel:
@@ -151,7 +163,6 @@ class TravelOrchestrator:
         return None
 
     def _select(self, state: TravelState) -> None:
-        """Python picks one flight and one hotel from the candidates."""
         pick = max if state.strategy == "comfort" else min
         state.selected_flight = pick(state.flights, key=lambda f: f.price)
         state.selected_hotel = pick(state.hotels, key=lambda h: h.price_per_night)
@@ -159,11 +170,6 @@ class TravelOrchestrator:
             state, "selection_made",
             f"strategy={state.strategy} flight={state.selected_flight.id} hotel={state.selected_hotel.id}",
         )
-
-
-    def _hotel_cap(self, req: TravelRequest) -> Decimal:
-        return hotel_cap(req) 
-
 
     async def _check_budget(self, state: TravelState) -> None:
         req = state.request
@@ -192,8 +198,7 @@ class TravelOrchestrator:
             total_cost=state.budget_result.total,
             budget=req.budget,
             hotels=[state.selected_hotel],
-            max_hotel_price_per_night=self._hotel_cap(req),
-            # The plan carries no traveller count yet, so this pair is trivially equal.
+            max_hotel_price_per_night=hotel_cap(req),
             travellers=req.travellers,
             expected_travellers=req.travellers,
             duration_days=state.selected_hotel.nights,
@@ -207,12 +212,6 @@ class TravelOrchestrator:
             names = ", ".join(v.constraint for v in state.constraint_result.violations)
             self._emit(state, "constraints_failed", f"Violations: {names}")
 
-    # ------------------------------------------------------------------
-    # Helpers
-    # ------------------------------------------------------------------
-
-    
-
     def _complete(self, state: TravelState) -> TravelState:
         req = state.request
         summary = (
@@ -225,11 +224,8 @@ class TravelOrchestrator:
             summary += f" Expected weather: {state.weather.condition}, {state.weather.temperature_celsius}°C."
 
         state.itinerary = Itinerary(
-            destination=req.destination,
-            duration_days=req.duration_days,
-            total_cost=state.budget_result.total,
-            currency=req.currency,
-            summary=summary,
+            destination=req.destination, duration_days=req.duration_days,
+            total_cost=state.budget_result.total, currency=req.currency, summary=summary,
         )
         state.status = "completed"
         self._emit(state, "planning_completed", "Planning completed")

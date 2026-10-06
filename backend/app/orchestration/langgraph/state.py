@@ -25,6 +25,7 @@ class GraphState(BaseModel):
 
     strategy: str = "comfort"
     status: str = "running"
+    preferences: str | None = None
 
     flights: list[Flight] = []
     hotels: list[Hotel] = []

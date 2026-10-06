@@ -9,11 +9,12 @@ from app.schemas.travel import Hotel
 
 class HotelAgentInput(BaseModel):
     city: str
-    check_in: str  # ISO date string, kept as str at the agent boundary
+    check_in: str
     check_out: str
     guests: int
     max_price_per_night: float
     currency: str = "INR"
+    preferences: str | None = None  # e.g. "prefers mid-range hotels"
 
 
 class HotelAgentOutput(BaseModel):
@@ -22,21 +23,24 @@ class HotelAgentOutput(BaseModel):
 
 
 class HotelAgent:
-    """
-    Clear input: HotelAgentInput. Clear output: AgentResult[HotelAgentOutput].
-    Limited tool: search_hotels. Does not touch budget or constraints.
-    """
-
     def __init__(self, llm: LLMProvider):
         self.llm = llm
 
     async def run(self, input: HotelAgentInput) -> AgentResult[HotelAgentOutput]:
+        preferences_block = (
+            f"\n\nStated user preferences (use these to decide which candidate "
+            f"to recommend among the tool's results — do not let them override "
+            f"or invent data the tool didn't return): {input.preferences}"
+            if input.preferences else ""
+        )
+
         prompt = (
             f"Find hotel options in {input.city} for {input.guests} guests, "
             f"check-in {input.check_in}, check-out {input.check_out}, "
             f"max {input.max_price_per_night} {input.currency} per night. "
             f"Use the search_hotels tool, then briefly explain which hotels "
             f"you'd recommend and why. {GROUNDING_RULE}"
+            f"{preferences_block}"
         )
 
         loop = await run_tool_loop(
