@@ -31,7 +31,12 @@ class Settings(BaseSettings):
     )
     embedding_model: str = "all-MiniLM-L6-v2"
 
-    use_real_weather: bool = False
+    use_real_weather: bool = True
+
+    duffel_api_key: str = ""
+    makcorps_rapidapi_key: str = ""
+    use_real_flights: bool = True
+    use_real_hotels: bool = True
 
 
 # Created once, imported everywhere else that needs settings.

@@ -3,6 +3,9 @@ import logging
 from datetime import timedelta
 from typing import Any
 
+from app.embeddings.local_provider import SentenceTransformerProvider
+from app.services.retriever_service import RetrieverService
+
 from app.agents import (
     ActivityAgent, ActivityAgentInput,
     BudgetAgent, BudgetAgentInput,
@@ -60,7 +63,7 @@ class TravelOrchestrator:
         return cls(
             flight_agent=FlightAgent(llm),
             hotel_agent=HotelAgent(llm),
-            activity_agent=ActivityAgent(llm),
+            activity_agent=ActivityAgent(llm, retriever=RetrieverService(SentenceTransformerProvider())),
             weather_agent=WeatherAgent(llm),
             budget_agent=BudgetAgent(llm),
             constraint_agent=ConstraintAgent(llm),
@@ -150,6 +153,7 @@ class TravelOrchestrator:
             state.hotels = hotel.data.selected_hotels
         if activity:
             state.activities = activity.data.activities
+            self._emit(state, "activity_reasoning", activity.data.reasoning)
         if weather:
             state.weather = weather.data.weather
 

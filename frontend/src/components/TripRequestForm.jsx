@@ -8,7 +8,7 @@ const initialForm = {
   duration_days: 7,
   budget: 200000,
   currency: 'INR',
-  interests: 'culture, outdoor',
+  interests: 'culture, outdoor, food',
   engine: 'custom',
 }
 
@@ -41,50 +41,156 @@ export default function TripRequestForm({ onSubmit, disabled }) {
   return (
     <form
       onSubmit={handleSubmit}
-      className="grid grid-cols-2 gap-4 bg-white p-6 rounded-xl shadow-sm border border-slate-200"
+      className="glass-panel p-6 rounded-2xl relative overflow-hidden space-y-6"
     >
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Origin
-        <input name="origin" value={form.origin} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Destination
-        <input name="destination" value={form.destination} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Start date
-        <input type="date" name="start_date" value={form.start_date} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Travellers
-        <input type="number" min="1" name="travellers" value={form.travellers} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Duration (days)
-        <input type="number" min="1" name="duration_days" value={form.duration_days} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Budget (INR)
-        <input type="number" min="1" name="budget" value={form.budget} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600 col-span-2">
-        Interests (comma separated)
-        <input name="interests" value={form.interests} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2" />
-      </label>
-      <label className="flex flex-col gap-1 text-sm text-slate-600">
-        Orchestration engine
-        <select name="engine" value={form.engine} onChange={handleChange} className="rounded-lg border border-slate-300 px-3 py-2">
-          <option value="custom">Custom orchestrator</option>
-          <option value="langgraph">LangGraph</option>
-        </select>
-      </label>
-      <div className="col-span-2 flex justify-end">
+      <div className="flex items-center justify-between border-b border-slate-800 pb-4">
+        <div>
+          <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+            <span className="flex h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+            Trip Parameters & Constraints
+          </h2>
+          <p className="text-xs text-slate-400">Configure parameters for multi-agent autonomous planning</p>
+        </div>
+        <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
+          Agentic Mode: Active
+        </span>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Origin
+          </label>
+          <input
+            name="origin"
+            value={form.origin}
+            onChange={handleChange}
+            placeholder="e.g. Delhi"
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Destination
+          </label>
+          <input
+            name="destination"
+            value={form.destination}
+            onChange={handleChange}
+            placeholder="e.g. Tokyo"
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Start Date
+          </label>
+          <input
+            type="date"
+            name="start_date"
+            value={form.start_date}
+            onChange={handleChange}
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition color-scheme-dark"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Travellers
+          </label>
+          <input
+            type="number"
+            min="1"
+            name="travellers"
+            value={form.travellers}
+            onChange={handleChange}
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Duration (Days)
+          </label>
+          <input
+            type="number"
+            min="1"
+            name="duration_days"
+            value={form.duration_days}
+            onChange={handleChange}
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Budget ({form.currency})
+          </label>
+          <input
+            type="number"
+            min="1"
+            name="budget"
+            value={form.budget}
+            onChange={handleChange}
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition"
+          />
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="md:col-span-2">
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Interests (comma separated)
+          </label>
+          <input
+            name="interests"
+            value={form.interests}
+            onChange={handleChange}
+            placeholder="culture, outdoor, food, shopping"
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">
+            Orchestration Engine
+          </label>
+          <select
+            name="engine"
+            value={form.engine}
+            onChange={handleChange}
+            className="w-full bg-slate-900/80 border border-slate-700/80 focus:border-cyan-500 rounded-xl px-3.5 py-2.5 text-sm text-slate-100 outline-none transition text-slate-200"
+          >
+            <option value="custom">Custom Autonomous Orchestrator</option>
+            <option value="langgraph">LangGraph Agent Engine</option>
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end pt-2">
         <button
           type="submit"
           disabled={disabled}
-          className="rounded-lg bg-slate-900 text-white px-5 py-2 text-sm font-medium disabled:opacity-50"
+          className="relative group overflow-hidden rounded-xl bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-600 p-[1px] font-medium disabled:opacity-50 transition"
         >
-          {disabled ? 'Planning…' : 'Plan my trip'}
+          <div className="px-6 py-3 rounded-[11px] bg-slate-950/90 group-hover:bg-transparent transition-all duration-300 flex items-center gap-2">
+            {disabled ? (
+              <>
+                <svg className="animate-spin h-4 w-4 text-cyan-400" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <span className="text-sm text-cyan-200">Agents Executing Pipeline...</span>
+              </>
+            ) : (
+              <>
+                <span className="text-sm font-semibold text-white">Trigger Multi-Agent Planning</span>
+                <span className="text-cyan-400 group-hover:translate-x-1 transition-transform">→</span>
+              </>
+            )}
+          </div>
         </button>
       </div>
     </form>

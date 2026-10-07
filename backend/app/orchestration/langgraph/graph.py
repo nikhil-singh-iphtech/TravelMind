@@ -2,6 +2,10 @@ from langgraph.graph import END, START, StateGraph
 
 from app.services.memory_service import MemoryService
 
+from app.embeddings.local_provider import SentenceTransformerProvider
+from app.services.retriever_service import RetrieverService
+
+
 from app.agents import ActivityAgent, BudgetAgent, ConstraintAgent, FlightAgent, HotelAgent, WeatherAgent
 from app.llm.base import LLMProvider
 from app.orchestration.langgraph.nodes import (
@@ -57,12 +61,11 @@ def build_graph_from_llm(llm: LLMProvider):
     return build_graph(
         flight_agent=FlightAgent(llm),
         hotel_agent=HotelAgent(llm),
-        activity_agent=ActivityAgent(llm),
+        activity_agent=ActivityAgent(llm, retriever=RetrieverService(SentenceTransformerProvider())),
         weather_agent=WeatherAgent(llm),
         budget_agent=BudgetAgent(llm),
         constraint_agent=ConstraintAgent(llm),
     )
-
 
 async def run_workflow(
     graph, request: TravelRequest, user_id: int | None = None, memory_service: MemoryService | None = None,
