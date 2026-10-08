@@ -1,3 +1,4 @@
+import uuid
 from langgraph.graph import END, START, StateGraph
 
 from app.services.memory_service import MemoryService
@@ -76,7 +77,8 @@ async def run_workflow(
         if prefs:
             preferences_text = "; ".join(f"{p.key}: {p.value}" for p in prefs)
 
-    initial = GraphState(request=request, preferences=preferences_text)
+    run_id = uuid.uuid4().hex[:8]
+    initial = GraphState(run_id=run_id, request=request, preferences=preferences_text)
     result = await graph.ainvoke(initial)
     state = TravelState.model_validate(dict(result))
 

@@ -1,6 +1,7 @@
 from decimal import Decimal
 
-from app.schemas import Hotel, ConstraintResult, ConstraintViolation
+from app.core.currency import convert
+from app.schemas import ConstraintResult, ConstraintViolation, Hotel
 
 
 class ConstraintEngine:
@@ -20,6 +21,7 @@ class ConstraintEngine:
         budget: Decimal,
         hotels: list[Hotel],
         max_hotel_price_per_night: Decimal | None = None,
+        budget_currency: str = "INR",
         travellers: int,
         expected_travellers: int,
         duration_days: int,
@@ -38,14 +40,18 @@ class ConstraintEngine:
 
         if max_hotel_price_per_night is not None:
             for hotel in hotels:
-                if hotel.price_per_night > max_hotel_price_per_night:
+                converted_hotel_price = convert(
+                    hotel.price_per_night, hotel.currency, budget_currency
+                )
+                if converted_hotel_price > max_hotel_price_per_night:
                     violations.append(
                         ConstraintViolation(
                             constraint=f"hotel_price:{hotel.id}",
-                            expected=str(max_hotel_price_per_night),
-                            actual=str(hotel.price_per_night),
+                            expected=f"{max_hotel_price_per_night} {budget_currency}",
+                            actual=f"{converted_hotel_price} {budget_currency} ({hotel.price_per_night} {hotel.currency})",
                         )
                     )
+
 
         if travellers != expected_travellers:
             violations.append(

@@ -22,8 +22,8 @@ async def test_real_weather_provider_returns_data_for_a_near_term_date():
     assert result.condition != ""
 
 
-async def test_real_weather_provider_raises_for_an_unknown_city():
+async def test_real_weather_provider_returns_fallback_for_unknown_city():
     provider = RealWeatherProvider()
-
-    with pytest.raises(OpenMeteoError):
-        await provider.get(WeatherInput(city="Nowhereville Zzzqx", target_date=date.today()))
+    result = await provider.get(WeatherInput(city="Nowhereville Zzzqx", target_date=date.today()))
+    assert result.condition == "Forecast not available yet"
+    assert result.temperature_celsius is None

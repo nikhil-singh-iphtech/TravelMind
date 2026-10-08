@@ -14,10 +14,16 @@ export function useTravelPlanStream() {
     setError(null)
     setStatus('running')
 
+    const token = localStorage.getItem('travelmind_token')
+    const headers = { 'Content-Type': 'application/json' }
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`
+    }
+
     try {
       const response = await fetch(`${API_BASE}/travel-plans/stream`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(payload),
       })
 
@@ -53,6 +59,9 @@ export function useTravelPlanStream() {
           } else if (eventType === 'complete') {
             setResult(data)
             setStatus(data.status === 'completed' ? 'done' : 'error')
+          } else if (eventType === 'error') {
+            setError(data.message || 'Planning failed. Please try again.')
+            setStatus('error')
           }
         }
       }
@@ -62,5 +71,5 @@ export function useTravelPlanStream() {
     }
   }, [])
 
-  return { events, result, status, error, start }
+  return { events, result, setResult, status, setStatus, error, start }
 }

@@ -25,13 +25,23 @@ class RetrieverService:
         return await asyncio.to_thread(self._ingest_sync, chunks, vectors)
 
     def _ingest_sync(self, chunks: Sequence[GuideChunk], vectors: list[list[float]]) -> int:
+        added_count = 0
         with SessionLocal() as session:
             for chunk, vector in zip(chunks, vectors):
-                session.add(DocumentChunk(
-                    source=chunk.source, city=chunk.city, content=chunk.content, embedding=vector,
-                ))
+                existing = session.execute(
+                    select(DocumentChunk).where(
+                        DocumentChunk.source == chunk.source,
+                        DocumentChunk.content == chunk.content,
+                    )
+                ).scalar_one_or_none()
+                if not existing:
+                    session.add(DocumentChunk(
+                        source=chunk.source, city=chunk.city, content=chunk.content, embedding=vector,
+                    ))
+                    added_count += 1
             session.commit()
-        return len(chunks)
+        return added_count
+
 
     async def retrieve(self, query: str, city: str | None = None, top_k: int = 3) -> list[RetrievedChunk]:
         [query_vector] = self.embeddings.embed([query])

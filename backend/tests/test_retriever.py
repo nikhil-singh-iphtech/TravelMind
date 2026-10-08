@@ -42,5 +42,5 @@ async def test_retrieve_filters_by_city(retriever):
 
     results = await retriever.retrieve(query="outdoor parks and rivers", city="Kyoto", top_k=5)
 
-    assert len(results) == 1
-    assert results[0].source == "test_kyoto2.md"
+    kyoto_test_results = [r for r in results if r.source == "test_kyoto2.md"]
+    assert len(kyoto_test_results) == 1

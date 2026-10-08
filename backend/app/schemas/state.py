@@ -4,6 +4,8 @@ from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
+from app.schemas.budget_advice import BudgetAdvice
+from app.schemas.destination import DestinationResource
 from app.schemas.results import BudgetResult, ConstraintResult, Itinerary
 from app.schemas.travel import Activity, Flight, Hotel
 from app.schemas.weather import WeatherInfo
@@ -60,6 +62,8 @@ class TravelState(BaseModel):
     budget_result: BudgetResult | None = None
     constraint_result: ConstraintResult | None = None
     itinerary: Itinerary | None = None
+    budget_advice: BudgetAdvice | None = None
+    destination_resources: list[DestinationResource] = []
 
     iteration: int = 0  # number of replans (used from Phase 9)
     errors: list[str] = []

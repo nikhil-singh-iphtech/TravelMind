@@ -1,15 +1,12 @@
+# app/core/budget.py
 from decimal import Decimal
 
-from app.schemas import Flight, Hotel, Activity, BudgetResult
+from app.core.currency import convert
+from app.schemas.results import BudgetResult
+from app.schemas.travel import Activity, Flight, Hotel
 
 
 class BudgetCalculator:
-    """
-    Deterministic budget math. No LLM involved — this class exists
-    specifically so nothing else in the system has to trust a model
-    to add numbers correctly.
-    """
-
     def calculate(
         self,
         budget: Decimal,
@@ -18,15 +15,12 @@ class BudgetCalculator:
         activities: list[Activity],
         transport: Decimal = Decimal("0"),
         food: Decimal = Decimal("0"),
+        currency: str = "INR",
     ) -> BudgetResult:
-        flights_total = sum((f.price for f in flights), Decimal("0"))
-        hotels_total = sum((h.total_price for h in hotels), Decimal("0"))
-        activities_total = sum((a.price for a in activities), Decimal("0"))
+        total = Decimal("0")
+        total += sum((convert(f.price, f.currency, currency) for f in flights), Decimal("0"))
+        total += sum((convert(h.total_price, h.currency, currency) for h in hotels), Decimal("0"))
+        total += sum((convert(a.price, a.currency, currency) for a in activities), Decimal("0"))
+        total += Decimal(transport) + Decimal(food)  # already in the budget currency
 
-        total = flights_total + hotels_total + activities_total + transport + food
-
-        return BudgetResult(
-            total=total,
-            budget=budget,
-            passed=total <= budget,
-        )
+        return BudgetResult(total=total, budget=budget, passed=total <= budget)

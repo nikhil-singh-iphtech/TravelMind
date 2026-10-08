@@ -1,12 +1,8 @@
-from sqlalchemy.orm import DeclarativeBase
+from app.db.session import engine, Base
+from app.db.models.user import User  # noqa
+from app.db.models.planning_run import PlanningRun  # noqa
+from app.db.models.document_chunk import DocumentChunk  # noqa
+from app.db.models.booking import Booking  # noqa
 
-
-class Base(DeclarativeBase):
-    """
-    Shared base class for all SQLAlchemy models.
-
-    Every model (User, TravelRequest, PlanningRun, ...) inherits
-    from this. Alembic points at Base.metadata to know what tables
-    should exist.
-    """
-    pass
+def init_db():
+    Base.metadata.create_all(bind=engine)

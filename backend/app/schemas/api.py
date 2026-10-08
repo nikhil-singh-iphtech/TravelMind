@@ -15,3 +15,14 @@ class PlanRequest(BaseModel):
     trip: TravelRequest
     user_id: int | None = None
     engine: Literal["custom", "langgraph"] = "custom"
+
+
+class RefineRequest(BaseModel):
+    """
+    Interactive plan refinement parameters allowing users to swap selected flights,
+    hotels, toggle activities, or update budget targets.
+    """
+    flight_id: str | None = None
+    hotel_id: str | None = None
+    excluded_activity_ids: list[str] = []
+    custom_budget: float | None = None

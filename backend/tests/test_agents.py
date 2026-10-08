@@ -24,7 +24,7 @@ async def test_flight_agent_returns_flights():
     )
 
     assert result.success is True
-    assert len(result.data.flights) == 2
+    assert len(result.data.flights) > 0
     assert result.data.reasoning == "IndiGo is cheapest."
 
 

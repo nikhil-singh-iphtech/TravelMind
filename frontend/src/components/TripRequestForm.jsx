@@ -51,9 +51,7 @@ export default function TripRequestForm({ onSubmit, disabled }) {
           </h2>
           <p className="text-xs text-slate-400">Configure parameters for multi-agent autonomous planning</p>
         </div>
-        <span className="text-xs px-2.5 py-1 rounded-full bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono">
-          Agentic Mode: Active
-        </span>
+      
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -186,7 +184,7 @@ export default function TripRequestForm({ onSubmit, disabled }) {
               </>
             ) : (
               <>
-                <span className="text-sm font-semibold text-white">Trigger Multi-Agent Planning</span>
+                <span className="text-sm font-semibold text-white">Start Planning</span>
                 <span className="text-cyan-400 group-hover:translate-x-1 transition-transform">→</span>
               </>
             )}

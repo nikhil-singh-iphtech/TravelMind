@@ -1,3 +1,4 @@
+from datetime import date, timedelta
 import httpx
 
 from app.schemas.tools import WeatherInput
@@ -6,7 +7,6 @@ from app.schemas.weather import WeatherInfo
 GEOCODING_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
 
-# WMO weather codes, simplified — https://open-meteo.com/en/docs
 WEATHER_CODE_DESCRIPTIONS = {
     0: "Clear sky", 1: "Mainly clear", 2: "Partly cloudy", 3: "Overcast",
     45: "Fog", 48: "Depositing rime fog",
@@ -26,16 +26,33 @@ class RealWeatherProvider:
     """
     No API key needed. Two real calls under the hood: geocode the
     city name to coordinates, then fetch the forecast for that
-    location. The agent above never sees either HTTP call — same
-    promise the Agent/Tool/Service/Provider split made back in Phase 4.
+    location.
     """
 
     def __init__(self, timeout: float = 10.0):
         self._timeout = timeout
 
     async def get(self, input: WeatherInput) -> WeatherInfo:
-        latitude, longitude = await self._geocode(input.city)
-        return await self._forecast(input, latitude, longitude)
+        # Check if requested date is more than 16 days out
+        max_date = date.today() + timedelta(days=16)
+        if input.target_date > max_date:
+            return WeatherInfo(
+                city=input.city,
+                target_date=input.target_date,
+                temperature_celsius=None,
+                condition="Forecast not available yet",
+            )
+
+        try:
+            latitude, longitude = await self._geocode(input.city)
+            return await self._forecast(input, latitude, longitude)
+        except OpenMeteoError:
+            return WeatherInfo(
+                city=input.city,
+                target_date=input.target_date,
+                temperature_celsius=None,
+                condition="Forecast not available yet",
+            )
 
     async def _geocode(self, city: str) -> tuple[float, float]:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
@@ -64,15 +81,24 @@ class RealWeatherProvider:
         async with httpx.AsyncClient(timeout=self._timeout) as client:
             try:
                 response = await client.get(FORECAST_URL, params=params)
+                if response.status_code == 400:
+                    return WeatherInfo(
+                        city=input.city,
+                        target_date=input.target_date,
+                        temperature_celsius=None,
+                        condition="Forecast not available yet",
+                    )
                 response.raise_for_status()
             except httpx.HTTPError as exc:
                 raise OpenMeteoError(f"forecast request failed: {exc}") from exc
 
         daily = response.json().get("daily")
         if not daily or not daily.get("time"):
-            raise OpenMeteoError(
-                f"no forecast data for {input.city} on {input.target_date} "
-                f"(Open-Meteo's free tier only covers roughly the next 16 days)"
+            return WeatherInfo(
+                city=input.city,
+                target_date=input.target_date,
+                temperature_celsius=None,
+                condition="Forecast not available yet",
             )
 
         temperature = daily["temperature_2m_max"][0]

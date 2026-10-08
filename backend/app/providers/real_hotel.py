@@ -1,5 +1,8 @@
+# app/providers/real_hotel.py
+"""Real hotel provider (MakCorps). Fails loudly: it never invents hotels."""
+import logging
 import re
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import httpx
 
@@ -7,39 +10,44 @@ from app.core.config import settings
 from app.schemas.tools import HotelSearchInput
 from app.schemas.travel import Hotel
 
-MAKCORPS_RAPIDAPI_HOST = "makcorps-hotel-price-comparison.p.rapidapi.com"
-MAKCORPS_BASE_URL = f"https://{MAKCORPS_RAPIDAPI_HOST}/free"
-# Confirm this host string on RapidAPI's "Endpoints" tab before relying
-# on it — it follows RapidAPI's standard slug convention but hasn't
-# been verified against the live listing.
+logger = logging.getLogger(__name__)
+
+# UNVERIFIED: this URL/param shape returned 404 before. Confirm against the
+# official docs in your MakCorps account (https://www.makcorps.com/documentation/).
+MAKCORPS_BASE_URL = "https://api.makcorps.com/free"
+
+_SYMBOLS = {"US$": "USD", "$": "USD", "€": "EUR", "£": "GBP", "₹": "INR", "¥": "JPY"}
 
 
 class MakCorpsError(Exception):
-    """Raised when MakCorps can't be reached or returns nothing usable."""
+    """Raised when the MakCorps call fails or returns something we can't use."""
 
 
-def _parse_price(raw: str | None) -> Decimal | None:
-    """
-    Prices come back as strings like "US$205" or "" (no quote from that
-    vendor). Strip everything except digits and the decimal point.
-    """
-    if not raw:
+def _parse_price(raw: object) -> tuple[Decimal, str] | None:
+    """'US$205' -> (Decimal('205'), 'USD'). Returns None if there is no usable price."""
+    if not raw or not isinstance(raw, str):
         return None
     digits = re.sub(r"[^\d.]", "", raw)
-    return Decimal(digits) if digits else None
+    if not digits:
+        return None
+    currency = next((code for sym, code in _SYMBOLS.items() if sym in raw), None)
+    if currency is None:
+        return None  # unknown currency: we never guess
+    try:
+        return Decimal(digits), currency
+    except InvalidOperation:
+        return None
 
 
 class RealHotelProvider:
-    def __init__(self, timeout: float = 10.0):
+    def __init__(self, timeout: float = 15.0):
         self._timeout = timeout
 
     async def search(self, input: HotelSearchInput) -> list[Hotel]:
-        nights = max(1, (input.check_out - input.check_in).days)
+        if not settings.makcorps_rapidapi_key:
+            raise MakCorpsError("MakCorps API key is not configured")
 
-        headers = {
-            "X-RapidAPI-Key": settings.makcorps_rapidapi_key,
-            "X-RapidAPI-Host": MAKCORPS_RAPIDAPI_HOST,
-        }
+        nights = max(1, (input.check_out - input.check_in).days)
         params = {
             "city": input.city,
             "checkin": input.check_in.isoformat(),
@@ -47,77 +55,48 @@ class RealHotelProvider:
             "rooms": 1,
             "adults": input.guests,
             "currency": input.currency,
+            "api_key": settings.makcorps_rapidapi_key,
         }
 
-        # Try MakCorps API if key is present
-        if settings.makcorps_rapidapi_key:
-            try:
-                async with httpx.AsyncClient(timeout=self._timeout) as client:
-                    response = await client.get(MAKCORPS_BASE_URL, headers=headers, params=params)
-                    if response.status_code == 200:
-                        data = response.json()
-                        entries = data.get("hotels") if isinstance(data, dict) else data
-                        if entries and isinstance(entries, list):
-                            hotels = []
-                            for i, entry in enumerate(entries):
-                                name = entry.get("Hotel") or entry.get("name")
-                                if not name:
-                                    continue
-                                quotes = [
-                                    _parse_price(entry.get("vendor1-price")),
-                                    _parse_price(entry.get("vendor2-price")),
-                                    _parse_price(entry.get("vendor3-price")),
-                                ]
-                                valid_quotes = [q for q in quotes if q is not None]
-                                price_per_night = min(valid_quotes) if valid_quotes else Decimal("120")
-                                if price_per_night <= input.max_price_per_night:
-                                    hotels.append(Hotel(
-                                        id=f"real-hotel-{i+1}",
-                                        name=name,
-                                        city=input.city,
-                                        price_per_night=price_per_night,
-                                        nights=nights,
-                                        currency=input.currency,
-                                    ))
-                            if hotels:
-                                return hotels
-            except Exception:
-                pass
+        try:
+            async with httpx.AsyncClient(timeout=self._timeout) as client:
+                response = await client.get(MAKCORPS_BASE_URL, params=params)
+                response.raise_for_status()
+                data = response.json()
+        except (httpx.HTTPError, ValueError) as exc:
+            status = getattr(getattr(exc, "response", None), "status_code", None)
+            logger.error("MakCorps request failed: %s status=%s", type(exc).__name__, status)
+            raise MakCorpsError(
+                f"hotel request failed: {type(exc).__name__} status={status}"
+            ) from None
+        entries = data.get("hotels") if isinstance(data, dict) else data
+        if not isinstance(entries, list) or not entries:
+            raise MakCorpsError("unexpected or empty response shape")
 
-        # Realistic Live Data Generator based on requested city & budget
-        city = input.city.strip().title()
-        base_rates = [
-            ("Grand Hyatt " + city, Decimal("180")),
-            ("Marriott Courtyard " + city + " Downtown", Decimal("135")),
-            ("The Ritz-Carlton " + city, Decimal("320")),
-            ("Hilton Garden Inn " + city, Decimal("110")),
-            ("Boutique Heritage Suites " + city, Decimal("165")),
-        ]
-        
-        hotels = []
-        for i, (name, base_price) in enumerate(base_rates):
-            # Scale slightly based on requested currency / guests
-            price = base_price * Decimal(str(1.0 + (input.guests - 1) * 0.15))
-            if price <= input.max_price_per_night:
-                hotels.append(Hotel(
-                    id=f"real-live-hotel-{i+1}",
+        hotels: list[Hotel] = []
+        for i, entry in enumerate(entries):
+            if not isinstance(entry, dict):
+                continue
+            name = entry.get("Hotel") or entry.get("name")
+            quotes = [
+                _parse_price(entry.get(f"vendor{n}-price")) for n in (1, 2, 3)
+            ]
+            quotes = [q for q in quotes if q is not None]
+            if not name or not quotes:
+                continue  # skip entries we can't trust; do not invent a price
+            price, currency = min(quotes, key=lambda q: q[0])
+            # ASSUMPTION: quoted price is per night. Verify against the docs.
+            hotels.append(
+                Hotel(
+                    id=f"makcorps-{i + 1}",
                     name=name,
-                    city=city,
-                    price_per_night=price.quantize(Decimal("0.01")),
+                    city=input.city,
+                    price_per_night=price,
                     nights=nights,
-                    currency=input.currency,
-                ))
+                    currency=currency,
+                )
+            )
 
         if not hotels:
-            # Fallback single hotel fitting budget constraint
-            affordable_price = min(input.max_price_per_night, Decimal("120.00"))
-            hotels.append(Hotel(
-                id="real-live-hotel-fit",
-                name=f"{city} Comfort Inn & Suites",
-                city=city,
-                price_per_night=affordable_price,
-                nights=nights,
-                currency=input.currency,
-            ))
-
+            raise MakCorpsError("no hotels with a usable price in the response")
         return hotels

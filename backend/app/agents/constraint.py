@@ -13,6 +13,7 @@ class ConstraintAgentInput(BaseModel):
     budget: Decimal
     hotels: list[Hotel]
     max_hotel_price_per_night: Decimal | None = None
+    budget_currency: str = "INR"
     travellers: int
     expected_travellers: int
     duration_days: int
@@ -37,6 +38,7 @@ class ConstraintAgent:
             budget=input.budget,
             hotels=input.hotels,
             max_hotel_price_per_night=input.max_hotel_price_per_night,
+            budget_currency=input.budget_currency,
             travellers=input.travellers,
             expected_travellers=input.expected_travellers,
             duration_days=input.duration_days,

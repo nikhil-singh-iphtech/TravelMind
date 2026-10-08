@@ -107,6 +107,14 @@ class TravelOrchestrator:
             self.replanner.replan(state)
             # loop back to research with the updated strategy/cap
 
+        # Compute Phase D Budget Advice and Destination Links
+        from app.core.budget_advisor import BudgetAdvisor
+        from app.services.search_service import SearchService
+
+        state.budget_advice = BudgetAdvisor().analyze(request, state)
+        search_svc = SearchService()
+        state.destination_resources = await search_svc.get_destination_resources(request.destination)
+
         if state.status == "completed" and self.memory_service and user_id:
             await self.memory_service.save_trip(user_id, state)
 
